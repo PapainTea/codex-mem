@@ -28,32 +28,32 @@ if [ -z "$TOOL_DATA" ]; then
   exit 0
 fi
 
-# Parse tool info and post to Worker API
-node -e "
-const data = JSON.parse(process.argv[1]);
-const sessionId = process.argv[2];
-const workerBase = process.argv[3];
-
-// Extract tool info from Codex hook payload
-const toolName = data.tool_name || data.toolName || data.name || 'unknown';
-const toolInput = JSON.stringify(data.tool_input || data.input || data.arguments || '').slice(0, 2000);
-const toolOutput = JSON.stringify(data.tool_output || data.output || data.result || '').slice(0, 2000);
-const cwd = data.cwd || '';
-
-// Skip memory tools to avoid recursion
-if (toolName.startsWith('mem_')) process.exit(0);
-
-fetch(workerBase + '/api/sessions/observations', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    contentSessionId: sessionId,
-    tool_name: toolName,
-    tool_input: toolInput,
-    tool_response: toolOutput,
-    cwd: cwd
-  })
-}).catch(() => {});
-" "$TOOL_DATA" "$SESSION_ID" "$WORKER_BASE" 2>/dev/null || true
+# Parse tool info and post to Worker API (pipe via stdin to avoid argv length limits)
+echo "$TOOL_DATA" | node -e "
+const sessionId = process.argv[1];
+const workerBase = process.argv[2];
+let d = '';
+process.stdin.on('data', c => d += c);
+process.stdin.on('end', () => {
+  let data;
+  try { data = JSON.parse(d); } catch { process.exit(0); }
+  const toolName = data.tool_name || data.toolName || data.name || 'unknown';
+  const toolInput = JSON.stringify(data.tool_input || data.input || data.arguments || '').slice(0, 2000);
+  const toolOutput = JSON.stringify(data.tool_output || data.output || data.result || '').slice(0, 2000);
+  const cwd = data.cwd || '';
+  if (toolName.startsWith('mem_')) process.exit(0);
+  fetch(workerBase + '/api/sessions/observations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contentSessionId: sessionId,
+      tool_name: toolName,
+      tool_input: toolInput,
+      tool_response: toolOutput,
+      cwd: cwd
+    })
+  }).catch(() => {});
+});
+" "$SESSION_ID" "$WORKER_BASE" 2>/dev/null || true
 
 exit 0
