@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# UserPromptSubmit hook - Capture user prompts as observations
+# Runs async so it doesn't block Codex
+set -euo pipefail
+
+WORKER_BASE="${CLAUDE_MEM_WORKER_URL:-http://127.0.0.1:37777}"
+STATE_DIR="${HOME}/.claude-mem"
+SESSION_FILE="${STATE_DIR}/codex-session.json"
+
+# No active session — skip
+if [ ! -f "$SESSION_FILE" ]; then
+  exit 0
+fi
+
+SESSION_ID=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).sessionId)}catch{console.log('')}" "$SESSION_FILE" 2>/dev/null || true)
+
+if [ -z "$SESSION_ID" ]; then
+  exit 0
+fi
+
+# Read prompt data from stdin
+PROMPT_DATA=""
+if [ ! -t 0 ]; then
+  PROMPT_DATA=$(cat 2>/dev/null || true)
+fi
+
+if [ -z "$PROMPT_DATA" ]; then
+  exit 0
+fi
+
+# Extract prompt text and post as observation
+node -e "
+const raw = process.argv[1];
+const sessionId = process.argv[2];
+const workerBase = process.argv[3];
+
+let prompt = '';
+try {
+  const data = JSON.parse(raw);
+  prompt = data.prompt || data.message || data.content || data.text || '';
+  if (typeof prompt !== 'string') prompt = JSON.stringify(prompt);
+} catch {
+  prompt = raw;
+}
+
+if (!prompt || prompt.length === 0) process.exit(0);
+
+// Truncate to 4000 chars
+const truncated = prompt.slice(0, 4000);
+
+fetch(workerBase + '/api/sessions/observations', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    contentSessionId: sessionId,
+    tool_name: 'user_prompt',
+    tool_input: truncated,
+    tool_response: '',
+    cwd: ''
+  })
+}).catch(() => {});
+" "$PROMPT_DATA" "$SESSION_ID" "$WORKER_BASE" 2>/dev/null || true
+
+exit 0
