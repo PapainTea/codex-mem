@@ -1,29 +1,31 @@
 # codex-mem
 
-> Persistent cross-session memory for [Codex CLI](https://github.com/openai/codex), powered by [claude-mem](https://github.com/thedotmack/claude-mem). Memory is shared bidirectionally with Claude Code.
+> Codex CLI 的跨会话持久记忆插件，基于 [claude-mem](https://github.com/thedotmack/claude-mem) Worker API，与 Claude Code 双向共享记忆。
 
-## Why
+[English](README_EN.md)
 
-Codex CLI sessions are stateless — every time you start a new conversation, all context from previous sessions is lost. codex-mem fixes this by:
+## 为什么需要这个
 
-- Automatically recording what you do in every session
-- Injecting relevant past context when a new session starts
-- Letting you search across all past work from any session
+Codex CLI 的会话是无状态的 —— 每次开新对话，之前所有的上下文都丢了。codex-mem 解决这个问题：
 
-Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is **shared with Claude Code**. Anything Codex captures is searchable in Claude Code, and vice versa.
+- 自动记录你每个会话里做的每一件事
+- 新会话开始时自动注入相关的历史上下文
+- 随时搜索所有过去的工作记录
 
-## Features
+记忆存储在本地 `~/.claude-mem/claude-mem.db`（SQLite），与 **Claude Code 双向共享** —— Codex 里记录的内容在 Claude Code 里能搜到，反过来也一样。
 
-| Feature | How |
-|---------|-----|
-| Auto-capture tool calls | PostToolUse hook records every tool execution |
-| Auto-inject past context | SessionStart hook loads relevant memories at startup |
-| Cross-platform search | 9 MCP tools + curl/PowerShell Direct API fallback |
-| Cross-tool memory sharing | Same SQLite DB used by Claude Code's claude-mem |
-| Windows-safe cold start | Bind probe + single-attempt + fail-closed strategy |
-| No manual lifecycle | Hooks handle session init and observation capture |
+## 功能一览
 
-## Architecture
+| 功能 | 实现方式 |
+|------|---------|
+| 自动记录工具调用 | PostToolUse hook 自动捕获每次工具执行 |
+| 自动注入历史上下文 | SessionStart hook 在启动时加载相关记忆 |
+| 跨平台搜索 | 9 个 MCP 工具 + curl / PowerShell 降级方案 |
+| 跨工具记忆共享 | 与 Claude Code 的 claude-mem 共用同一个 SQLite 数据库 |
+| Windows 安全冷启动 | 端口探测 + 单次启动 + 失败即停止 |
+| 无需手动管理生命周期 | hooks 自动处理 session 初始化和观察记录 |
+
+## 架构
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -31,7 +33,7 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
 │                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
 │  │ SessionStart │  │ PostToolUse  │  │  MCP Bridge  │  │
-│  │    Hook      │  │    Hook      │  │ (9 tools)    │  │
+│  │    Hook      │  │    Hook      │  │  (9 个工具)  │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
 │         │                 │                 │           │
 │         │  HTTP POST      │  HTTP POST      │  HTTP     │
@@ -41,60 +43,60 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
           │                 │                 │
           ▼                 ▼                 ▼
 ┌─────────────────────────────────────────────────────────┐
-│           claude-mem Worker API (localhost:37777)        │
-│           Managed by Claude Code's claude-mem plugin     │
+│        claude-mem Worker API (localhost:37777)           │
+│        由 Claude Code 的 claude-mem 插件管理              │
 ├─────────────────────────────────────────────────────────┤
 │  ~/.claude-mem/claude-mem.db (SQLite)                   │
-│  Observations · Sessions · Summaries · Prompts          │
-│  ← Shared with Claude Code sessions →                   │
+│  观察记录 · 会话 · 摘要 · 提示词                           │
+│  ← 与 Claude Code 会话双向共享 →                          │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow
+### 数据流
 
-1. **Session Start** — When Codex starts a session, the SessionStart hook:
-   - Checks if the Worker API is running (with port bind probe on Windows)
-   - Cold-starts the Worker if needed (smart-install → bun-runner → worker-service)
-   - Calls `POST /api/sessions/init` to create a session
-   - Calls `GET /api/context/inject` to fetch relevant past memories
-   - Injects the context into Codex via `additional_context` JSON output
+1. **会话开始** —— SessionStart hook 触发时：
+   - 检测 Worker API 是否在运行（Windows 上会做端口绑定探测）
+   - 如果需要，尝试一次冷启动（smart-install → bun-runner → worker-service）
+   - 调用 `POST /api/sessions/init` 创建会话
+   - 调用 `GET /api/context/inject` 获取相关历史记忆
+   - 通过 `additional_context` JSON 输出注入到 Codex 上下文
 
-2. **During Work** — After every tool call (file edits, bash commands, searches, etc.), the PostToolUse hook:
-   - Reads tool execution data from stdin
-   - Calls `POST /api/sessions/observations` to record it
-   - Runs asynchronously — never blocks Codex
+2. **工作过程中** —— 每次工具调用后，PostToolUse hook：
+   - 从 stdin 读取工具执行数据
+   - 调用 `POST /api/sessions/observations` 记录观察
+   - 异步执行，不阻塞 Codex
 
-3. **Search / Save** — When you need to look up past work:
-   - Model uses `mem_search` MCP tool → mcp-bridge.mjs → Worker API
-   - If MCP is blocked by Codex approval settings, falls back to curl/PowerShell
+3. **搜索 / 保存** —— 需要查找过去的工作时：
+   - 模型使用 `mem_search` MCP 工具 → mcp-bridge.mjs → Worker API
+   - 如果 MCP 被 Codex 审批设置拦截，降级使用 curl / PowerShell 直接调 API
 
-## Prerequisites
+## 前置条件
 
-| Requirement | Why |
-|-------------|-----|
-| [Codex CLI](https://github.com/openai/codex) | The host CLI this plugin extends |
-| [Claude Code](https://claude.ai/claude-code) + [claude-mem](https://github.com/thedotmack/claude-mem) | Provides the Worker API and SQLite database |
-| Node.js >= 18 | Runs MCP bridge and hook helper scripts |
-| Git Bash (Windows only) | Hooks are bash scripts; run-hook.cmd finds Git Bash automatically |
+| 依赖 | 说明 |
+|------|------|
+| [Codex CLI](https://github.com/openai/codex) | 本插件扩展的宿主 CLI |
+| [Claude Code](https://claude.ai/claude-code) + [claude-mem](https://github.com/thedotmack/claude-mem) | 提供 Worker API 和 SQLite 数据库 |
+| Node.js >= 18 | 运行 MCP bridge 和 hook 辅助脚本 |
+| Git Bash（仅 Windows） | hooks 是 bash 脚本；run-hook.cmd 会自动查找 Git Bash |
 
-## Installation
+## 安装
 
-### 1. Clone
+### 1. 克隆仓库
 
 ```bash
 git clone https://github.com/PapainTea/codex-mem.git
 cd codex-mem
 ```
 
-### 2. Install dependencies
+### 2. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 3. Deploy to Codex plugin directory
+### 3. 部署到 Codex 插件目录
 
-Linux / macOS:
+Linux / macOS：
 ```bash
 mkdir -p ~/.codex/.tmp/plugins/plugins/claude-mem
 cp -r .codex-plugin hooks scripts skills package.json package-lock.json \
@@ -102,7 +104,7 @@ cp -r .codex-plugin hooks scripts skills package.json package-lock.json \
 cd ~/.codex/.tmp/plugins/plugins/claude-mem && npm install --production
 ```
 
-Windows (Git Bash):
+Windows（Git Bash）：
 ```bash
 mkdir -p "$HOME/.codex/.tmp/plugins/plugins/claude-mem"
 cp -r .codex-plugin hooks scripts skills package.json package-lock.json \
@@ -110,132 +112,133 @@ cp -r .codex-plugin hooks scripts skills package.json package-lock.json \
 cd "$HOME/.codex/.tmp/plugins/plugins/claude-mem" && npm install --production
 ```
 
-### 4. Register MCP server
+### 4. 注册 MCP 服务
 
 ```bash
 codex mcp add claude-mem -- node "$HOME/.codex/.tmp/plugins/plugins/claude-mem/scripts/mcp-bridge.mjs"
 ```
 
-### 5. Enable hooks (experimental feature)
+### 5. 启用 hooks（实验性功能）
 
 ```bash
 codex features enable codex_hooks
 ```
 
-### 6. Verify
+### 6. 验证
 
-Restart Codex. On startup you should see:
+重启 Codex，启动时应该看到：
 ```
 Loaded: 1 plugin · skills · hooks · 1 MCP server
 ```
 
-## Windows Safety
+## Windows 安全策略
 
-On Windows, Bun (used by the claude-mem Worker) has a known TCP socket leak: when a Bun process is killed, the kernel may not release the TCP port, causing `EADDRINUSE` that persists until reboot. ([bun#issue](https://github.com/oven-sh/bun/issues))
+在 Windows 上，Bun（claude-mem Worker 的运行时）存在已知的 TCP socket 泄漏问题：进程被杀后内核可能不释放端口，导致 `EADDRINUSE`，只有重启电脑才能恢复。
 
-This plugin implements a **fail-closed** strategy to avoid making things worse:
+本插件实现了**失败即停止（fail-closed）**策略，避免雪上加霜：
 
-| Scenario | Behavior |
-|----------|----------|
-| Worker running + healthy | Use directly |
-| Worker not running + port free | **One** cold start attempt (smart-install → bun-runner → worker-service) |
-| Worker not running + port occupied | **Do nothing** — output `{}`, skip silently |
-| Cold start times out | **Do nothing** — no retry, no loop |
-| MCP tool fails | Return clear error message, suggest Direct API fallback |
+| 场景 | 行为 |
+|------|------|
+| Worker 运行中且健康 | 直接使用 |
+| Worker 未运行 + 端口空闲 | 尝试**一次**冷启动 |
+| Worker 未运行 + 端口被占 | **什么都不做** —— 输出 `{}`，静默跳过 |
+| 冷启动超时 | **什么都不做** —— 不重试，不循环 |
+| MCP 工具失败 | 返回清晰错误信息，建议使用 Direct API 降级方案 |
 
-The bind probe uses Node.js `net.createServer()` to test if the port is actually bindable, detecting ghost sockets that `netstat` might miss.
+端口探测使用 Node.js `net.createServer()` 测试端口是否真正可绑定，能检测到 `netstat` 可能遗漏的幽灵 socket。
 
-## Searching Memory
+## 搜索记忆
 
-### Via MCP Tools (preferred)
+### 通过 MCP 工具（首选）
 
 ```
-mem_search({ query: "auth middleware refactor", limit: 20 })
-mem_timeline({ query: "database migration", depth_before: 10, depth_after: 10 })
+mem_search({ query: "认证中间件重构", limit: 20 })
+mem_timeline({ query: "数据库迁移", depth_before: 10, depth_after: 10 })
 mem_get_observations({ ids: [123, 456] })
 ```
 
-### Via Direct API (fallback when MCP is blocked)
+### 通过 Direct API（MCP 被拦截时的降级方案）
 
-curl (Git Bash):
+curl（Git Bash）：
 ```bash
 curl -s -G "http://127.0.0.1:37777/api/search" \
-  --data-urlencode "query=auth middleware" \
+  --data-urlencode "query=认证中间件" \
   --data-urlencode "limit=20"
 ```
 
-PowerShell:
+PowerShell：
 ```powershell
-$q = [uri]::EscapeDataString("auth middleware")
+$q = [uri]::EscapeDataString("认证中间件")
 Invoke-RestMethod "http://127.0.0.1:37777/api/search?query=$q&limit=20"
 ```
 
-See [SKILL.md](skills/claude-mem/SKILL.md) for the full list of API endpoints and examples.
+完整的 API 端点和示例见 [SKILL.md](skills/claude-mem/SKILL.md)。
 
-## File Structure
+## 文件结构
 
 ```
 codex-mem/
 ├── .codex-plugin/
-│   └── plugin.json           # Plugin manifest — declares hooks + skills
+│   └── plugin.json           # 插件清单 —— 声明 hooks + skills
 ├── hooks/
-│   ├── hooks.json            # Hook definitions (SessionStart + PostToolUse)
-│   ├── session-start         # Init session, cold start Worker, inject context
-│   ├── post-tool-use         # Auto-capture tool call observations
-│   └── run-hook.cmd          # Windows polyglot wrapper (finds Git Bash)
+│   ├── hooks.json            # Hook 定义（SessionStart + PostToolUse）
+│   ├── session-start         # 初始化会话、冷启动 Worker、注入上下文
+│   ├── post-tool-use         # 自动捕获工具调用观察记录
+│   └── run-hook.cmd          # Windows polyglot wrapper（查找 Git Bash）
 ├── scripts/
-│   ├── mcp-bridge.mjs        # MCP server — 9 memory tools over stdio
-│   └── mcp-bridge.cmd        # Windows batch launcher
+│   ├── mcp-bridge.mjs        # MCP 服务 —— 9 个记忆工具，通过 stdio 通信
+│   └── mcp-bridge.cmd        # Windows batch 启动器
 ├── skills/
 │   └── claude-mem/
-│       ├── SKILL.md          # Model instructions (search, save, fallback)
-│       └── agents/openai.yaml # MCP tool declarations
-├── package.json              # Dependencies (@modelcontextprotocol/sdk)
+│       ├── SKILL.md          # 模型指令（搜索、保存、降级方案）
+│       └── agents/openai.yaml # MCP 工具声明
+├── package.json              # 依赖（@modelcontextprotocol/sdk）
 ├── LICENSE                   # MIT
-└── README.md
+├── README.md                 # 本文件
+└── README_EN.md              # English version
 ```
 
-## MCP Tools Reference
+## MCP 工具参考
 
-| Tool | Description | Auto? |
-|------|-------------|-------|
-| `mem_session_start` | Initialize a memory session | Yes (hook) |
-| `mem_post_tool_use` | Record a tool usage observation | Yes (hook) |
-| `mem_session_end` | End session, trigger summary | No (optional) |
-| `mem_search` | Full-text search across all memories | No (manual) |
-| `mem_timeline` | Timeline view around a specific event | No (manual) |
-| `mem_get_observations` | Fetch full details by observation ID | No (manual) |
-| `mem_save` | Manually save a note or decision | No (manual) |
-| `mem_context` | Get recent context for a project | No (manual) |
-| `mem_stats` | Database statistics (size, counts, uptime) | No (manual) |
+| 工具 | 描述 | 自动？ |
+|------|------|--------|
+| `mem_session_start` | 初始化记忆会话 | 是（hook） |
+| `mem_post_tool_use` | 记录工具使用观察 | 是（hook） |
+| `mem_session_end` | 结束会话，触发摘要生成 | 否（可选） |
+| `mem_search` | 全文搜索所有记忆 | 否（手动） |
+| `mem_timeline` | 查看某个事件前后的时间线 | 否（手动） |
+| `mem_get_observations` | 按 ID 获取观察记录详情 | 否（手动） |
+| `mem_save` | 手动保存笔记或决策 | 否（手动） |
+| `mem_context` | 获取项目的近期上下文 | 否（手动） |
+| `mem_stats` | 数据库统计（大小、数量、运行时间） | 否（手动） |
 
-**Auto?** = Whether hooks handle this automatically. Tools marked "Yes" are still available for manual use but you don't need to call them — hooks do it for you.
+**自动？** = hooks 是否自动处理。标记"是"的工具仍然可以手动使用，但你不需要主动调用 —— hooks 会帮你做。
 
-## Troubleshooting
+## 常见问题
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| MCP tools return "Worker unavailable" | Worker API not running | Start Claude Code, or check `curl http://127.0.0.1:37777/api/readiness` |
-| Hooks not firing | `codex_hooks` feature not enabled | Run `codex features enable codex_hooks` |
-| Session start hangs | smart-install.js downloading Bun/dependencies | Wait (first-time only, max ~60s timeout) |
-| Port 37777 locked after crash | Bun TCP socket leak (Windows) | Reboot. Do not try to force-start another Worker. |
-| "No active session" on mem_session_end | Previous init failed | Check Worker is healthy, try `mem_session_start` first |
-| Search returns nothing | Wrong project filter or empty DB | Try `mem_stats` to check DB has data |
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| MCP 工具返回 "Worker unavailable" | Worker API 没有运行 | 启动 Claude Code，或检查 `curl http://127.0.0.1:37777/api/readiness` |
+| Hooks 不触发 | `codex_hooks` 功能未启用 | 执行 `codex features enable codex_hooks` |
+| 会话启动卡住 | smart-install.js 正在下载 Bun/依赖 | 等待（仅首次，最长约 60 秒超时） |
+| 端口 37777 被锁死 | Bun TCP socket 泄漏（Windows） | 重启电脑。不要尝试强制启动新的 Worker。 |
+| mem_session_end 报 "No active session" | 之前的 init 失败了 | 检查 Worker 是否健康，先试 `mem_session_start` |
+| 搜索没有结果 | 项目过滤条件错误或数据库为空 | 用 `mem_stats` 检查数据库是否有数据 |
 
-## Known Limitations
+## 已知限制
 
-- **Worker dependency** — Requires claude-mem Worker API running on localhost:37777. Without it, all memory operations fail gracefully but no data is captured.
-- **No auto-summarize on exit** — Codex's Stop hook support is unverified; sessions may not get AI-generated summaries. Use `mem_session_end` manually if needed.
-- **PostToolUse silent failure** — If Worker crashes mid-session, observations are silently lost (no retry).
-- **Windows Bun socket leak** — If Worker enters a zombie state, only a reboot clears the locked port.
-- **codex_hooks is experimental** — Hook behavior may change across Codex versions.
+- **依赖 Worker** —— 需要 claude-mem Worker API 在 localhost:37777 运行。没有它，所有记忆操作会优雅失败但不会记录数据。
+- **退出时无自动摘要** —— Codex 的 Stop hook 支持尚未验证；会话可能不会生成 AI 摘要。如需要请手动调用 `mem_session_end`。
+- **PostToolUse 静默丢失** —— 如果 Worker 在会话中途崩溃，观察记录会静默丢失（不重试）。
+- **Windows Bun socket 泄漏** —— 如果 Worker 进入僵死状态，只有重启电脑才能释放被锁定的端口。
+- **codex_hooks 是实验性功能** —— hook 行为可能随 Codex 版本变化。
 
-## Credits
+## 致谢
 
-- [claude-mem](https://github.com/thedotmack/claude-mem) by Alex Newman — the Worker API and memory engine
-- [Codex CLI](https://github.com/openai/codex) by OpenAI — the host CLI
-- [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk) — MCP bridge implementation
+- [claude-mem](https://github.com/thedotmack/claude-mem) by Alex Newman —— Worker API 和记忆引擎
+- [Codex CLI](https://github.com/openai/codex) by OpenAI —— 宿主 CLI
+- [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk) —— MCP bridge 实现
 
-## License
+## 许可证
 
 [MIT](LICENSE)
