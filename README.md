@@ -2,9 +2,10 @@
 
 > Codex CLI 的跨会话持久记忆插件，基于 [claude-mem](https://github.com/thedotmack/claude-mem) Worker API，与 Claude Code 双向共享记忆。
 
-[English](README_EN.md)  <p align="center">
-    <a href="https://linux.do" alt="LINUX DO"><img src="https://shorturl.at/ggSqS" /></a>
-</p>  
+<p align="center">
+  <a href="README_EN.md">English</a> ·
+  <a href="https://linux.do"><img src="https://shorturl.at/ggSqS" height="20" alt="LINUX DO" style="vertical-align: middle;" /></a>
+</p>
 
 ## 为什么需要这个
 
