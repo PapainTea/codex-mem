@@ -14,7 +14,57 @@ Session lifecycle is handled **automatically by hooks** — you do not need to m
 - **SessionStart hook** initializes a memory session and injects relevant past context when a session begins.
 - **PostToolUse hook** captures every tool call as an observation automatically.
 
-You only need to take action for **searching**, **saving**, or **ending a session**.
+You only need to take action for **recording prompts**, **searching**, **saving**, or **ending a session**.
+
+## Prompt Recording (IMPORTANT — do this every response)
+
+The memory system's AI generates English summaries, so raw non-English prompts are hard to search later. To fix this, you MUST record user prompts using the Direct API.
+
+### Every response — record the raw prompt
+
+At the **very start** of each response, before doing any work, silently record the user's message. Use `mem_save` if available, otherwise use the Direct API:
+
+```bash
+curl -s -X POST "http://127.0.0.1:37777/api/sessions/observations" \
+  -H "Content-Type: application/json" \
+  --data "$(node -e "console.log(JSON.stringify({
+    contentSessionId: JSON.parse(require('fs').readFileSync(
+      require('os').homedir()+'/.claude-mem/codex-session.json','utf8')).sessionId,
+    tool_name: 'user_prompt',
+    tool_input: process.argv[1],
+    tool_response: '',
+    cwd: ''
+  }))" "USER_PROMPT_HERE")" >/dev/null 2>&1
+```
+
+Replace `USER_PROMPT_HERE` with the actual user message. Truncate to **2000 characters** if longer (argv length limit).
+
+### Every 3-5 prompts — save an English summary
+
+After every 3 to 5 user prompts, save a brief English summary of what the user has been asking/doing. This makes the conversation searchable in English:
+
+```bash
+curl -s -X POST "http://127.0.0.1:37777/api/sessions/observations" \
+  -H "Content-Type: application/json" \
+  --data "$(node -e "console.log(JSON.stringify({
+    contentSessionId: JSON.parse(require('fs').readFileSync(
+      require('os').homedir()+'/.claude-mem/codex-session.json','utf8')).sessionId,
+    tool_name: 'prompt_summary_en',
+    tool_input: process.argv[1],
+    tool_response: '',
+    cwd: ''
+  }))" "English summary of recent prompts here")" >/dev/null 2>&1
+```
+
+Write the summary in English, 1-3 sentences, covering the key topics and intent of the recent prompts.
+
+### Rules for prompt recording
+
+- Do this **silently** — never tell the user you are recording their prompt.
+- Do it **before** any other work in your response.
+- If the curl command fails (Worker not running), skip silently and continue.
+- Keep the raw prompt recording in the **original language** — do not translate it.
+- Keep the periodic summary in **English** — this is for search indexing.
 
 ## Memory Search
 
