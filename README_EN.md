@@ -18,6 +18,8 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
 |---------|-----|
 | Auto-capture tool calls | PostToolUse hook records every tool execution |
 | Auto-inject past context | SessionStart hook loads relevant memories at startup |
+| Record user prompts | Each response records the raw prompt (preserves original language) |
+| Periodic English summaries | Every 3-5 prompts, an English summary is saved for cross-language search |
 | Cross-platform search | 9 MCP tools + curl/PowerShell Direct API fallback |
 | Cross-tool memory sharing | Same SQLite DB used by Claude Code's claude-mem |
 | Windows-safe cold start | Bind probe + single-attempt + fail-closed strategy |
