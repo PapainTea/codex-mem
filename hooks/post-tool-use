@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# PostToolUse hook - Automatically capture every tool call to claude-mem
+# Runs async so it doesn't block Codex
+set -euo pipefail
+
+WORKER_BASE="${CLAUDE_MEM_WORKER_URL:-http://127.0.0.1:37777}"
+STATE_DIR="${HOME}/.claude-mem"
+SESSION_FILE="${STATE_DIR}/codex-session.json"
+
+# Read session state
+if [ ! -f "$SESSION_FILE" ]; then
+  exit 0  # No active session, skip silently
+fi
+
+SESSION_ID=$(node -e "try{const d=require('fs').readFileSync('${SESSION_FILE}','utf8');console.log(JSON.parse(d).sessionId)}catch{console.log('')}" 2>/dev/null || true)
+
+if [ -z "$SESSION_ID" ]; then
+  exit 0
+fi
+
+# Read tool use data from stdin (Codex pipes JSON with tool info)
+TOOL_DATA=""
+if [ ! -t 0 ]; then
+  TOOL_DATA=$(cat 2>/dev/null || true)
+fi
+
+if [ -z "$TOOL_DATA" ]; then
+  exit 0
+fi
+
+# Parse tool info and post to Worker API
+node -e "
+const data = JSON.parse(process.argv[1]);
+const sessionId = process.argv[2];
+const workerBase = process.argv[3];
+
+// Extract tool info from Codex hook payload
+const toolName = data.tool_name || data.toolName || data.name || 'unknown';
+const toolInput = JSON.stringify(data.tool_input || data.input || data.arguments || '').slice(0, 2000);
+const toolOutput = JSON.stringify(data.tool_output || data.output || data.result || '').slice(0, 2000);
+const cwd = data.cwd || '';
+
+// Skip memory tools to avoid recursion
+if (toolName.startsWith('mem_')) process.exit(0);
+
+fetch(workerBase + '/api/sessions/observations', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    contentSessionId: sessionId,
+    tool_name: toolName,
+    tool_input: toolInput,
+    tool_response: toolOutput,
+    cwd: cwd
+  })
+}).catch(() => {});
+" "$TOOL_DATA" "$SESSION_ID" "$WORKER_BASE" 2>/dev/null || true
+
+exit 0

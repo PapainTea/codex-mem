@@ -1,0 +1,20 @@
+{
+  "name": "claude-mem",
+  "version": "1.0.0",
+  "description": "Persistent memory across Codex and Claude Code sessions. Automatically captures tool usage, generates summaries, and provides relevant context.",
+  "author": {
+    "name": "claude-mem"
+  },
+  "license": "MIT",
+  "keywords": ["memory", "context", "persistence", "claude-mem"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "claude-mem",
+    "shortDescription": "Persistent memory shared with Claude Code",
+    "longDescription": "Automatically captures every tool call, generates AI-powered summaries, and injects relevant context from past sessions. Memory is shared between Codex CLI and Claude Code.",
+    "developerName": "claude-mem",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"]
+  }
+}

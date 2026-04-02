@@ -1,0 +1,33 @@
+interface:
+  display_name: "claude-mem"
+  short_description: "Persistent memory shared with Claude Code"
+
+dependencies:
+  tools:
+    - type: mcp
+      value: mem_session_start
+      description: Start a memory session
+    - type: mcp
+      value: mem_post_tool_use
+      description: Record a tool usage observation
+    - type: mcp
+      value: mem_session_end
+      description: End session and trigger summary
+    - type: mcp
+      value: mem_search
+      description: Search past memories
+    - type: mcp
+      value: mem_timeline
+      description: Get timeline around an event
+    - type: mcp
+      value: mem_get_observations
+      description: Get full observation details
+    - type: mcp
+      value: mem_save
+      description: Manually save a memory
+    - type: mcp
+      value: mem_context
+      description: Get recent memory context
+    - type: mcp
+      value: mem_stats
+      description: Get memory database stats
