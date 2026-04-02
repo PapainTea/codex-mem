@@ -18,53 +18,66 @@ You only need to take action for **recording prompts**, **searching**, **saving*
 
 ## Prompt Recording (IMPORTANT — do this every response)
 
-The memory system's AI generates English summaries, so raw non-English prompts are hard to search later. To fix this, you MUST record user prompts using the Direct API.
+The memory system's AI generates English summaries, so raw non-English prompts are hard to search later. To fix this, you MUST record user prompts directly.
 
 ### Every response — record the raw prompt
 
-At the **very start** of each response, before doing any work, silently record the user's message. Use `mem_save` if available, otherwise use the Direct API:
+At the **very start** of each response, before doing any work, silently record the user's message. Use a heredoc to avoid shell escaping issues — paste the raw prompt as-is between the markers:
 
 ```bash
-curl -s -X POST "http://127.0.0.1:37777/api/sessions/observations" \
-  -H "Content-Type: application/json" \
-  --data "$(node -e "console.log(JSON.stringify({
-    contentSessionId: JSON.parse(require('fs').readFileSync(
-      require('os').homedir()+'/.claude-mem/codex-session.json','utf8')).sessionId,
-    tool_name: 'user_prompt',
-    tool_input: process.argv[1],
-    tool_response: '',
-    cwd: ''
-  }))" "USER_PROMPT_HERE")" >/dev/null 2>&1
+node -e '
+const fs=require("fs"),os=require("os");
+let d="";
+process.stdin.on("data",c=>d+=c);
+process.stdin.on("end",()=>{
+  try{
+    const sid=JSON.parse(fs.readFileSync(os.homedir()+"/.claude-mem/codex-session.json","utf8")).sessionId;
+    fetch("http://127.0.0.1:37777/api/sessions/observations",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({contentSessionId:sid,tool_name:"user_prompt",tool_input:d.slice(0,4000),tool_response:"",cwd:""})
+    }).catch(()=>{});
+  }catch(e){}
+});
+' <<'PROMPT_EOF'
+Paste the user's raw prompt here — no escaping needed.
+PROMPT_EOF
 ```
 
-Replace `USER_PROMPT_HERE` with the actual user message. Truncate to **2000 characters** if longer (argv length limit).
+Replace the text between `<<'PROMPT_EOF'` and `PROMPT_EOF` with the actual user message (truncated to 4000 chars if extremely long).
 
 ### Every 3-5 prompts — save an English summary
 
 After every 3 to 5 user prompts, save a brief English summary of what the user has been asking/doing. This makes the conversation searchable in English:
 
 ```bash
-curl -s -X POST "http://127.0.0.1:37777/api/sessions/observations" \
-  -H "Content-Type: application/json" \
-  --data "$(node -e "console.log(JSON.stringify({
-    contentSessionId: JSON.parse(require('fs').readFileSync(
-      require('os').homedir()+'/.claude-mem/codex-session.json','utf8')).sessionId,
-    tool_name: 'prompt_summary_en',
-    tool_input: process.argv[1],
-    tool_response: '',
-    cwd: ''
-  }))" "English summary of recent prompts here")" >/dev/null 2>&1
+node -e '
+const fs=require("fs"),os=require("os");
+let d="";
+process.stdin.on("data",c=>d+=c);
+process.stdin.on("end",()=>{
+  try{
+    const sid=JSON.parse(fs.readFileSync(os.homedir()+"/.claude-mem/codex-session.json","utf8")).sessionId;
+    fetch("http://127.0.0.1:37777/api/sessions/observations",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({contentSessionId:sid,tool_name:"prompt_summary_en",tool_input:d,tool_response:"",cwd:""})
+    }).catch(()=>{});
+  }catch(e){}
+});
+' <<'SUMMARY_EOF'
+Write 1-3 English sentences summarizing the recent user prompts.
+SUMMARY_EOF
 ```
-
-Write the summary in English, 1-3 sentences, covering the key topics and intent of the recent prompts.
 
 ### Rules for prompt recording
 
 - Do this **silently** — never tell the user you are recording their prompt.
 - Do it **before** any other work in your response.
-- If the curl command fails (Worker not running), skip silently and continue.
+- If the command fails (Worker not running), skip silently and continue.
 - Keep the raw prompt recording in the **original language** — do not translate it.
 - Keep the periodic summary in **English** — this is for search indexing.
+- Use heredoc (`<<'PROMPT_EOF'`) so special characters in the prompt don't break the command.
 
 ## Memory Search
 
