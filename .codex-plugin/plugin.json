@@ -1,19 +1,24 @@
 {
   "name": "claude-mem",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Persistent memory across Codex and Claude Code sessions. Automatically captures tool usage, generates summaries, and provides relevant context.",
   "author": {
-    "name": "claude-mem"
+    "name": "PapainTea",
+    "url": "https://github.com/PapainTea"
   },
+  "repository": "https://github.com/PapainTea/codex-mem",
   "license": "MIT",
-  "keywords": ["memory", "context", "persistence", "claude-mem"],
+  "keywords": ["memory", "context", "persistence", "claude-mem", "cross-session", "codex-plugin"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "interface": {
-    "displayName": "claude-mem",
+    "displayName": "codex-mem",
     "shortDescription": "Persistent memory shared with Claude Code",
-    "longDescription": "Automatically captures every tool call, generates AI-powered summaries, and injects relevant context from past sessions. Memory is shared between Codex CLI and Claude Code.",
-    "developerName": "claude-mem",
+    "longDescription": "Automatically captures every tool call and user prompt, generates AI-powered summaries, and injects relevant context from past sessions. Memory is shared between Codex CLI and Claude Code. Includes Windows-safe cold start with fail-closed strategy.",
+    "developerName": "PapainTea",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read"]
   }
