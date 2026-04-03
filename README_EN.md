@@ -27,29 +27,18 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
 
 ## Architecture
 
+```mermaid
+graph TD
+    subgraph Codex CLI
+        A[SessionStart Hook] -->|POST /sessions/init| D
+        B[PostToolUse Hook] -->|POST /sessions/observations| D
+        C[MCP Bridge - 9 tools] -->|HTTP GET/POST| D
+    end
+
+    D[claude-mem Worker API\nlocalhost:37777]
+
+    D --- E["~/.claude-mem/claude-mem.db (SQLite)\nObservations | Sessions | Summaries | Prompts\n← Shared with Claude Code →"]
 ```
-┌───────────────────────────────────────────────────────┐
-│                      Codex CLI                        │
-│                                                       │
-│  ┌────────────┐  ┌────────────┐  ┌────────────────┐  │
-│  │SessionStart│  │PostToolUse │  │  MCP Bridge    │  │
-│  │   Hook     │  │   Hook     │  │  (9 tools)     │  │
-│  └─────┬──────┘  └─────┬──────┘  └───────┬────────┘  │
-│        │               │                 │           │
-│        │ POST          │ POST            │ HTTP      │
-│        │ /sessions/    │ /sessions/      │ GET/POST  │
-│        │ init          │ observations    │           │
-└────────┼───────────────┼─────────────────┼───────────┘
-         │               │                 │
-         ▼               ▼                 ▼
-┌───────────────────────────────────────────────────────┐
-│    claude-mem Worker API (localhost:37777)             │
-│    Managed by Claude Code's claude-mem plugin         │
-├───────────────────────────────────────────────────────┤
-│  ~/.claude-mem/claude-mem.db (SQLite)                 │
-│  Observations / Sessions / Summaries / Prompts        │
-│  <-- Shared with Claude Code sessions -->             │
-└───────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
