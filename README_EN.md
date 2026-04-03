@@ -27,17 +27,18 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
 
 ## Architecture
 
-```mermaid
-graph TD
-    subgraph Codex CLI
-        A[SessionStart Hook] -->|POST /sessions/init| D
-        B[PostToolUse Hook] -->|POST /sessions/observations| D
-        C[MCP Bridge - 9 tools] -->|HTTP GET/POST| D
-    end
-
-    D[claude-mem Worker API\nlocalhost:37777]
-
-    D --- E["~/.claude-mem/claude-mem.db (SQLite)\nObservations | Sessions | Summaries | Prompts\n← Shared with Claude Code →"]
+```
+Codex CLI
+  ├─ SessionStart hook ─→ init session + inject past context
+  ├─ PostToolUse hook  ─→ auto-capture every tool call
+  ├─ Prompt recording  ─→ save raw prompts + English summaries
+  └─ MCP bridge / curl ─→ search, save, query memory
+         │
+         ▼
+  claude-mem Worker API (localhost:37777)
+         │
+         ▼
+  ~/.claude-mem/claude-mem.db (SQLite, shared with Claude Code)
 ```
 ```
 
