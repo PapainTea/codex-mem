@@ -28,17 +28,28 @@ Your memory is stored locally in `~/.claude-mem/claude-mem.db` (SQLite) and is *
 ## Architecture
 
 ```
-Codex CLI
-  ├─ SessionStart hook ─→ init session + inject past context
-  ├─ PostToolUse hook  ─→ auto-capture every tool call
-  ├─ Prompt recording  ─→ save raw prompts + English summaries
-  └─ MCP bridge / curl ─→ search, save, query memory
-         │
-         ▼
-  claude-mem Worker API (localhost:37777)
-         │
-         ▼
-  ~/.claude-mem/claude-mem.db (SQLite, shared with Claude Code)
+┌─────────────────────────────────────────────────────────┐
+│                      Codex CLI                          │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ SessionStart │  │ PostToolUse  │  │  MCP Bridge  │  │
+│  │    Hook      │  │    Hook      │  │  (9 tools)   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                 │                 │           │
+│         │  HTTP POST      │  HTTP POST      │  HTTP     │
+│         │  /sessions/init │  /sessions/     │  GET/POST │
+│         │                 │  observations   │           │
+└─────────┼─────────────────┼─────────────────┼───────────┘
+          │                 │                 │
+          ▼                 ▼                 ▼
+┌─────────────────────────────────────────────────────────┐
+│        claude-mem Worker API (localhost:37777)           │
+│        Managed by Claude Code's claude-mem plugin       │
+├─────────────────────────────────────────────────────────┤
+│  ~/.claude-mem/claude-mem.db (SQLite)                   │
+│  Observations / Sessions / Summaries / Prompts          │
+│  <-- Shared with Claude Code sessions -->               │
+└─────────────────────────────────────────────────────────┘
 ```
 ```
 
